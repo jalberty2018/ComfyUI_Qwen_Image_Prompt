@@ -1,0 +1,16 @@
+[
+  {
+    "mode": "T2I",
+    "repository": "https://huggingface.co/pottokao/Qwen-Image-2.1-PE-T2I-Heretic-GGUF",
+    "revision": "143825976126abcfa68722d3e48819c5647f9cd8",
+    "system_prompt": "system_prompt.txt",
+    "license": "LICENSE"
+  },
+  {
+    "mode": "I2I",
+    "repository": "https://huggingface.co/pottokao/Qwen-Image-2.1-PE-I2I-Heretic-GGUF",
+    "revision": "564f783ebea6c244c7dae8460ece65eb174479a6",
+    "system_prompt": "system_prompt.txt",
+    "license": "LICENSE"
+  }
+]

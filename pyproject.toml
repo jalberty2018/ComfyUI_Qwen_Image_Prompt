@@ -1,0 +1,14 @@
+[project]
+name = "qwen-image-prompt"
+version = "0.3.0"
+description = "Qwen-Image 2.1 T2I and I2I prompt enhancement with llama.cpp."
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dependencies = ["numpy", "Pillow"]
+
+[project.urls]
+Repository = "https://github.com/jalberty2018/ComfyUI_Qwen_Image_Prompt"
+
+[tool.comfy]
+PublisherId = "chflame163"
+DisplayName = "Qwen Image 2.1 Prompt"
