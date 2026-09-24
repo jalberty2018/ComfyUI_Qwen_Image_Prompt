@@ -12,7 +12,7 @@ import folder_paths
 from comfy_api.latest import ComfyExtension, io
 
 from .media import image_content, text_content
-from .model_files import DEFAULT_MODELS, DEFAULT_MMPROJ, model_options, projector_options, resolve_gguf
+from .model_files import DEFAULT_MODELS, DEFAULT_MMPROJ, model_options, model_mode, projector_options, resolve_gguf
 from .runtime import LlamaServerManager
 from .skills import (
     PROMPT_PROFILES, PROMPT_PROFILE_STANDARD,
@@ -63,19 +63,20 @@ def _user_content(prompt, images):
 class QwenImagePrompt(io.ComfyNode):
     @classmethod
     def define_schema(cls):
+        models = model_options(MODEL_DIR)
         return io.Schema(
-            node_id="QwenImagePromptLocal",
-            display_name="Qwen Image 2.1 Prompt (Local)",
+            node_id="QwenImagePromptSimple",
+            display_name="Qwen Image 2.1 Prompt (Simple)",
             category="😺dzNodes/Qwen_Image_Prompt",
             description="Qwen-Image 2.1 T2I / I2I prompt enhancer using llama.cpp b11115.",
             inputs=[
                 io.String.Input("prompt", multiline=True, dynamic_prompts=True,
                                 default="Describe the image or the desired edit."),
                 io.Combo.Input("skill", options=["qwen-image-prompt"], default="qwen-image-prompt"),
-                io.Combo.Input("t2i_model", options=model_options(MODEL_DIR, "T2I")),
-                io.Combo.Input("i2i_model", options=model_options(MODEL_DIR, "I2I")),
+                io.Combo.Input("model", options=models, default=models[0],
+                               tooltip="Select T2I for text only or I2I for reference images."),
                 io.Combo.Input("mmproj", options=projector_options(MODEL_DIR), default="",
-                               tooltip="Leave empty for T2I. With reference images, an empty value automatically finds the I2I projector beside the model."),
+                               tooltip="Leave empty for T2I. Select the I2I mmproj for an I2I model."),
                 io.Boolean.Input("think_mode", default=False),
                 io.Combo.Input("reasoning_effort", options=["low", "medium", "xhigh"], default="medium",
                                tooltip="Applied only in thinking mode."),
@@ -97,7 +98,7 @@ class QwenImagePrompt(io.ComfyNode):
 
     @classmethod
     def execute(cls, prompt, skill="qwen-image-prompt",
-                t2i_model=DEFAULT_MODELS["T2I"], i2i_model=DEFAULT_MODELS["I2I"],
+                model=DEFAULT_MODELS["T2I"],
                 think_mode=False, reasoning_effort="medium", seed=0, max_tokens=8192,
                 force_unload_model=True, prompt_profile=PROMPT_PROFILE_STANDARD,
                 additional_system_instructions="",
@@ -117,23 +118,19 @@ class QwenImagePrompt(io.ComfyNode):
                     reference_image_7, reference_image_8, reference_image_9,
                     reference_image_10,
                 ) if image is not None]
-                _validate_reference_images(images)
-                mode = "I2I" if images else "T2I"
-                model_name = t2i_model if mode == "T2I" else i2i_model
-                if Path(model_name).name not in {
-                    f"pe_{mode.lower()}_heretic-{quant}.gguf" for quant in ("Q4_K_M", "Q6_K", "Q8_0")
-                }:
-                    raise ValueError(f"Select a supported {mode} Heretic GGUF model")
-                model = resolve_gguf(MODEL_DIR, model_name, LOGGER)
-                projector = None
-                if mode == "I2I" and images:
-                    # Prefer the matching projector beside the selected I2I model.
-                    sibling = model.parent / DEFAULT_MMPROJ
-                    projector = resolve_gguf(
-                        MODEL_DIR,
-                        mmproj.strip() or (sibling.relative_to(MODEL_DIR.resolve()).as_posix()
-                        if sibling.is_file() else DEFAULT_MMPROJ), LOGGER,
-                    )
+                mode = model_mode(model)
+                if mode == "T2I":
+                    images = []
+                else:
+                    _validate_reference_images(images)
+                    if not images:
+                        raise ValueError("I2I requires at least one reference image (maximum 10)")
+                    if not mmproj.strip():
+                        raise ValueError("Select the I2I mmproj file in the mmproj field")
+                    if Path(mmproj).name != DEFAULT_MMPROJ:
+                        raise ValueError("mmproj must be pe_i2i_heretic.mmproj-bf16.gguf, not a model file")
+                model = resolve_gguf(MODEL_DIR, model, LOGGER)
+                projector = resolve_gguf(MODEL_DIR, mmproj, LOGGER) if mode == "I2I" else None
                 comfy.model_management.unload_all_models()
                 comfy.model_management.soft_empty_cache()
                 server, loaded_new = SERVER_MANAGER.acquire(model, projector)

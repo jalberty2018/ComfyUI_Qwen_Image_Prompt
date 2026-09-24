@@ -1,6 +1,6 @@
 # ComfyUI Qwen Image 2.1 Prompt
 
-Local prompt enhancement for Qwen-Image 2.1 using the two Heretic GGUF prompt rewriters and an external llama.cpp **b11115** executable. Add **Qwen Image 2.1 Prompt (Local)** to your workflow.
+Local prompt enhancement for Qwen-Image 2.1 using the two Heretic GGUF prompt rewriters and an external llama.cpp **b11115** executable. Add **Qwen Image 2.1 Prompt (Simple)** to your workflow.
 
 ## Installation
 
@@ -14,29 +14,28 @@ Download the models and configure llama.cpp as described below, then restart Com
 
 ## Modes and inputs
 
-The mode is automatic; there is no `model_mode` selector:
+There is one `model` selector and one `mmproj` selector. The selected model determines the mode; there is no `model_mode` selector.
 
-- Empty reference-image inputs: T2I, with no mmproj passed to llama.cpp.
-- One to ten reference images: I2I, with the matching mmproj.
+- T2I model: text only. Leave `mmproj` empty. Connected images and any selected projector are ignored.
+- I2I model: connect one to ten reference images and select `pe_i2i_heretic.mmproj-bf16.gguf` in `mmproj`. Missing images or an empty projector produce a clear error before loading.
 - `skill` contains only `qwen-image-prompt`; no automatic skill routing is used.
-- Leave `mmproj` empty for T2I. For I2I, select the projector or leave it empty to discover the matching file beside the I2I model automatically.
 
 There are exactly ten optional IMAGE inputs, `reference_image_1` through `reference_image_10`. Disconnected inputs and inputs returning `None` are skipped. Each supplied tensor must hold one image, not a batch. Nonempty inputs are numbered consecutively as `<image1>`, `<image2>`, etc., in socket order. Refer to these consecutive numbers in your request. Video and audio inputs are not supported.
 
 The three STRING outputs retain their existing names and order: `h3_prompt`, `selected_skill`, `detected_mode`. The historical first name is retained only for output compatibility; its value is the extracted `rewritten_prompt` for Qwen Image. The third output is `T2I` or `I2I`. Aspect-ratio metadata is parsed internally and is not exposed as an additional output.
 
-This node uses a distinct `QwenImagePromptLocal` ID so it can coexist with the original node. Replace the old node in existing workflows and reconnect the three outputs; the old video widgets and serialized widget positions are not compatible. After upgrading from a version with `model_mode`, recreate the node to avoid shifted saved widget values.
+This layout uses the new `QwenImagePromptSimple` ID to prevent old positional widget values from being silently applied to different fields. After updating, restart ComfyUI, refresh the page, and replace the old node with **Qwen Image 2.1 Prompt (Simple)**. Reconnect its inputs and three outputs. Old workflow nodes are not migrated automatically.
 
 ## Models
 
-Place models anywhere below `ComfyUI/models/LLM`. The two model-file selectors show only the corresponding model family's Q4_K_M, Q6_K and Q8_0 variants, using relative paths to distinguish duplicate filenames. Only the model for the selected mode must be installed.
+Place models anywhere below `ComfyUI/models/LLM`. The single model selector shows both model families' Q4_K_M, Q6_K and Q8_0 variants, using relative paths to distinguish duplicate filenames. Only the model for the selected mode must be installed.
 
 | Mode | Repository | Default file |
 |---|---|---|
 | T2I | [PE-T2I-Heretic-GGUF](https://huggingface.co/pottokao/Qwen-Image-2.1-PE-T2I-Heretic-GGUF) | `pe_t2i_heretic-Q4_K_M.gguf` |
 | I2I | [PE-I2I-Heretic-GGUF](https://huggingface.co/pottokao/Qwen-Image-2.1-PE-I2I-Heretic-GGUF) | `pe_i2i_heretic-Q4_K_M.gguf` |
 
-For I2I images, place `pe_i2i_heretic.mmproj-bf16.gguf` beside the I2I model. The node first checks that directory, then searches `models/LLM` for one unambiguous matching projector.
+For I2I images, place `pe_i2i_heretic.mmproj-bf16.gguf` beside the I2I model. Select that file in the separate `mmproj` dropdown, which excludes model files.
 
 From the ComfyUI directory:
 

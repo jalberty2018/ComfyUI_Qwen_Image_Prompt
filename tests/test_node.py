@@ -96,7 +96,12 @@ class NodeTests(unittest.TestCase):
         self.assertEqual(len(images), 10)
         self.assertTrue(all(field.optional for field in images))
         self.assertEqual([o.name for o in schema.outputs], ["h3_prompt", "selected_skill", "detected_mode"])
-        self.assertNotIn("model_mode", [f.name for f in schema.inputs])
+        for removed in ("model_mode", "t2i_model", "i2i_model"):
+            self.assertNotIn(removed, [f.name for f in schema.inputs])
+        self.assertEqual(schema.node_id, "QwenImagePromptSimple")
+        model_field = next(f for f in schema.inputs if f.name == "model")
+        self.assertEqual(set(model_field.options), set(node.DEFAULT_MODELS.values()))
+        self.assertIn(model_field.default, model_field.options)
         self.assertEqual(next(f for f in schema.inputs if f.name == "skill").options, ["qwen-image-prompt"])
         self.assertEqual(next(f for f in schema.inputs if f.name == "mmproj").default, "")
 
@@ -110,7 +115,7 @@ class NodeTests(unittest.TestCase):
 
     def test_sparse_images_are_forwarded_in_socket_order(self):
         self.server.chat.return_value = response("I2I")
-        result = node.QwenImagePrompt.execute("Combine these", reference_image_2=image("second"),
+        result = node.QwenImagePrompt.execute("Combine these", model=node.DEFAULT_MODELS["I2I"], mmproj=node.DEFAULT_MMPROJ, reference_image_2=image("second"),
                                              reference_image_10=image("tenth"), force_unload_model=False)
         self.assertEqual(result.result[-1], "I2I")
         content = self.server.chat.call_args.args[0][1]["content"]
@@ -123,7 +128,7 @@ class NodeTests(unittest.TestCase):
 
     def test_all_ten_images_forwarded(self):
         self.server.chat.return_value = response("I2I")
-        node.QwenImagePrompt.execute("Combine", **{f"reference_image_{i}": image(str(i)) for i in range(1, 11)})
+        node.QwenImagePrompt.execute("Combine", model=node.DEFAULT_MODELS["I2I"], mmproj=node.DEFAULT_MMPROJ, **{f"reference_image_{i}": image(str(i)) for i in range(1, 11)})
         content = self.server.chat.call_args.args[0][1]["content"]
         self.assertEqual(sum(part["type"] == "image_url" for part in content), 10)
 
@@ -136,9 +141,27 @@ class NodeTests(unittest.TestCase):
         projector.parent.mkdir()
         projector.touch()
         self.server.chat.return_value = response("I2I")
-        node.QwenImagePrompt.execute("Edit", reference_image_1=image(),
+        node.QwenImagePrompt.execute("Edit", model=node.DEFAULT_MODELS["I2I"], reference_image_1=image(),
                                      mmproj="I2I/" + node.DEFAULT_MMPROJ)
         self.assertEqual(self.manager.acquire.call_args.args[1], projector)
+
+    def test_t2i_never_sends_connected_images_or_projector(self):
+        result = node.QwenImagePrompt.execute("A bicycle", reference_image_1=image(),
+                                             mmproj=node.DEFAULT_MMPROJ)
+        self.assertEqual(result.result[-1], "T2I")
+        self.assertIsNone(self.manager.acquire.call_args.args[1])
+        content = self.server.chat.call_args.args[0][1]["content"]
+        self.assertTrue(all(item["type"] == "text" for item in content))
+
+    def test_i2i_requires_images_and_projector(self):
+        with self.assertRaisesRegex(ValueError, "at least one"):
+            node.QwenImagePrompt.execute("Edit", model=node.DEFAULT_MODELS["I2I"])
+        with self.assertRaisesRegex(ValueError, "Select the I2I mmproj"):
+            node.QwenImagePrompt.execute("Edit", model=node.DEFAULT_MODELS["I2I"], reference_image_1=image())
+        with self.assertRaisesRegex(ValueError, "not a model file"):
+            node.QwenImagePrompt.execute("Edit", model=node.DEFAULT_MODELS["I2I"],
+                                         reference_image_1=image(), mmproj=node.DEFAULT_MODELS["I2I"])
+        self.manager.acquire.assert_not_called()
 
     def test_skill_is_fixed_without_router_call(self):
         result = node.QwenImagePrompt.execute("A bicycle", skill="auto")
@@ -151,7 +174,7 @@ class NodeTests(unittest.TestCase):
 
     def test_batch_rejected_before_acquiring_server(self):
         with self.assertRaisesRegex(ValueError, "exactly one image"):
-            node.QwenImagePrompt.execute("Edit", reference_image_1=image(batch=2))
+            node.QwenImagePrompt.execute("Edit", model=node.DEFAULT_MODELS["I2I"], reference_image_1=image(batch=2))
         self.manager.acquire.assert_not_called()
         self.manager.release.assert_called_once()
 
@@ -169,7 +192,7 @@ class NodeTests(unittest.TestCase):
     def test_missing_projector_fails_before_server(self):
         (self.root / node.DEFAULT_MMPROJ).unlink()
         with self.assertRaises(FileNotFoundError):
-            node.QwenImagePrompt.execute("Edit", reference_image_1=image())
+            node.QwenImagePrompt.execute("Edit", model=node.DEFAULT_MODELS["I2I"], mmproj=node.DEFAULT_MMPROJ, reference_image_1=image())
         self.manager.acquire.assert_not_called()
 
 

@@ -29,6 +29,25 @@ class ModelTests(unittest.TestCase):
             with self.assertRaisesRegex(FileNotFoundError, "Ambiguous"):
                 models.resolve_gguf(root, "pe_t2i_heretic-Q4_K_M.gguf")
 
+    def test_unified_selector_only_lists_installed_q8_models(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            names = ["Qwen-Image-2.1-PE-T2I-Heretic-GGUF/pe_t2i_heretic-Q8_0.gguf",
+                     "Qwen-Image-2.1-PE-I2I-Heretic-GGUF/pe_i2i_heretic-Q8_0.gguf"]
+            for name in names:
+                path = root / name
+                path.parent.mkdir()
+                path.touch()
+            projector = root / Path(names[1]).parent / models.DEFAULT_MMPROJ
+            projector.touch()
+            self.assertEqual(set(models.model_options(root)), set(names))
+            self.assertEqual(models.projector_options(root), ["", projector.relative_to(root).as_posix()])
+            self.assertEqual([models.model_mode(name) for name in names], ["T2I", "I2I"])
+            (root / names[1]).unlink()
+            self.assertEqual(models.model_options(root), [names[0]])
+            with self.assertRaises(ValueError):
+                models.model_mode(models.DEFAULT_MMPROJ)
+
     def test_path_escape_and_missing_files(self):
         with tempfile.TemporaryDirectory() as directory:
             outer = Path(directory)

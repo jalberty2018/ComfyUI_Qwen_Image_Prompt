@@ -15,13 +15,15 @@ def _is_usable_gguf(path: Path, root: Path) -> bool:
             and path.is_relative_to(root) and ".cache" not in path.relative_to(root).parts)
 
 
-def model_options(model_root: Path, mode: str) -> list[str]:
+def model_options(model_root: Path, mode: str | None = None) -> list[str]:
     root = model_root.resolve()
-    allowed = {f"pe_{mode.lower()}_heretic-{quant}.gguf" for quant in ("Q4_K_M", "Q6_K", "Q8_0")}
+    modes = (mode,) if mode else ("T2I", "I2I")
+    allowed = {f"pe_{family.lower()}_heretic-{quant}.gguf"
+               for family in modes for quant in ("Q4_K_M", "Q6_K", "Q8_0")}
     options = {path.resolve().relative_to(root).as_posix()
                for path in root.rglob("*.gguf")
                if path.name in allowed and _is_usable_gguf(path.resolve(), root)}
-    return sorted(options, key=str.casefold) or [DEFAULT_MODELS[mode]]
+    return sorted(options, key=str.casefold) or [DEFAULT_MODELS[family] for family in modes]
 
 
 def resolve_gguf(model_dir: Path, name: str, logger: logging.Logger | None = None) -> Path:
@@ -45,3 +47,12 @@ def projector_options(model_root: Path) -> list[str]:
                for path in root.rglob(DEFAULT_MMPROJ)
                if _is_usable_gguf(path.resolve(), root)}
     return ["", *sorted(options, key=str.casefold)]
+
+
+def model_mode(model_name: str) -> str:
+    name = Path(model_name).name
+    for mode in ("T2I", "I2I"):
+        if name in {f"pe_{mode.lower()}_heretic-{quant}.gguf"
+                    for quant in ("Q4_K_M", "Q6_K", "Q8_0")}:
+            return mode
+    raise ValueError("Select a supported T2I or I2I Heretic GGUF model")
