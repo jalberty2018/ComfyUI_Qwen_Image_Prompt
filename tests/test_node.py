@@ -96,7 +96,9 @@ class NodeTests(unittest.TestCase):
         self.assertEqual(len(images), 10)
         self.assertTrue(all(field.optional for field in images))
         self.assertEqual([o.name for o in schema.outputs], ["h3_prompt", "selected_skill", "detected_mode"])
-        self.assertEqual(next(f for f in schema.inputs if f.name == "model_mode").options, ["auto", "T2I", "I2I"])
+        self.assertNotIn("model_mode", [f.name for f in schema.inputs])
+        self.assertEqual(next(f for f in schema.inputs if f.name == "skill").options, ["qwen-image-prompt"])
+        self.assertEqual(next(f for f in schema.inputs if f.name == "mmproj").default, "")
 
     def test_auto_without_images_loads_only_t2i_without_projector(self):
         (self.root / node.DEFAULT_MMPROJ).unlink()
@@ -125,17 +127,27 @@ class NodeTests(unittest.TestCase):
         content = self.server.chat.call_args.args[0][1]["content"]
         self.assertEqual(sum(part["type"] == "image_url" for part in content), 10)
 
-    def test_explicit_t2i_ignores_images(self):
-        node.QwenImagePrompt.execute("A bicycle", model_mode="T2I", reference_image_1=image())
-        content = self.server.chat.call_args.args[0][1]["content"]
-        self.assertTrue(all(item["type"] == "text" for item in content))
+    def test_t2i_ignores_stale_projector_selection(self):
+        node.QwenImagePrompt.execute("A bicycle", mmproj="missing.gguf")
         self.assertIsNone(self.manager.acquire.call_args.args[1])
 
-    def test_i2i_text_only_needs_no_projector(self):
-        (self.root / node.DEFAULT_MMPROJ).unlink()
+    def test_explicit_i2i_projector(self):
+        projector = self.root / "I2I" / node.DEFAULT_MMPROJ
+        projector.parent.mkdir()
+        projector.touch()
         self.server.chat.return_value = response("I2I")
-        self.assertEqual(node.QwenImagePrompt.execute("Change the sky", model_mode="I2I").result[-1], "I2I")
-        self.assertIsNone(self.manager.acquire.call_args.args[1])
+        node.QwenImagePrompt.execute("Edit", reference_image_1=image(),
+                                     mmproj="I2I/" + node.DEFAULT_MMPROJ)
+        self.assertEqual(self.manager.acquire.call_args.args[1], projector)
+
+    def test_skill_is_fixed_without_router_call(self):
+        result = node.QwenImagePrompt.execute("A bicycle", skill="auto")
+        self.assertEqual(result.result[1], "qwen-image-prompt")
+        self.server.chat.assert_called_once()
+
+    def test_more_than_ten_images_rejected(self):
+        with self.assertRaisesRegex(ValueError, "At most 10"):
+            node._validate_reference_images([image() for _ in range(11)])
 
     def test_batch_rejected_before_acquiring_server(self):
         with self.assertRaisesRegex(ValueError, "exactly one image"):

@@ -37,3 +37,11 @@ def resolve_gguf(model_dir: Path, name: str, logger: logging.Logger | None = Non
         if len(matches) > 1:
             raise FileNotFoundError(f"Ambiguous GGUF filename: {name}; select a relative path")
     raise FileNotFoundError(f"Invalid or missing GGUF model in {root}: {name}")
+
+
+def projector_options(model_root: Path) -> list[str]:
+    root = model_root.resolve()
+    options = {path.resolve().relative_to(root).as_posix()
+               for path in root.rglob(DEFAULT_MMPROJ)
+               if _is_usable_gguf(path.resolve(), root)}
+    return ["", *sorted(options, key=str.casefold)]

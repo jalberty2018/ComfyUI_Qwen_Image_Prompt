@@ -14,15 +14,18 @@ Download the models and configure llama.cpp as described below, then restart Com
 
 ## Modes and inputs
 
-- `auto`: T2I when all image inputs are empty; I2I when at least one image is supplied.
-- `T2I`: use the T2I model and send text only, even with connected image inputs. No projector is loaded.
-- `I2I`: use the I2I model with zero to ten images. Text-only editing instructions are also supported; the projector is loaded only when images are supplied.
+The mode is automatic; there is no `model_mode` selector:
+
+- Empty reference-image inputs: T2I, with no mmproj passed to llama.cpp.
+- One to ten reference images: I2I, with the matching mmproj.
+- `skill` contains only `qwen-image-prompt`; no automatic skill routing is used.
+- Leave `mmproj` empty for T2I. For I2I, select the projector or leave it empty to discover the matching file beside the I2I model automatically.
 
 There are exactly ten optional IMAGE inputs, `reference_image_1` through `reference_image_10`. Disconnected inputs and inputs returning `None` are skipped. Each supplied tensor must hold one image, not a batch. Nonempty inputs are numbered consecutively as `<image1>`, `<image2>`, etc., in socket order. Refer to these consecutive numbers in your request. Video and audio inputs are not supported.
 
 The three STRING outputs retain their existing names and order: `h3_prompt`, `selected_skill`, `detected_mode`. The historical first name is retained only for output compatibility; its value is the extracted `rewritten_prompt` for Qwen Image. The third output is `T2I` or `I2I`. Aspect-ratio metadata is parsed internally and is not exposed as an additional output.
 
-This node uses a distinct `QwenImagePromptLocal` ID so it can coexist with the original node. Replace the old node in existing workflows and reconnect the three outputs; the old video widgets and serialized widget positions are not compatible.
+This node uses a distinct `QwenImagePromptLocal` ID so it can coexist with the original node. Replace the old node in existing workflows and reconnect the three outputs; the old video widgets and serialized widget positions are not compatible. After upgrading from a version with `model_mode`, recreate the node to avoid shifted saved widget values.
 
 ## Models
 
@@ -64,7 +67,7 @@ Keep the executable's runtime libraries available through the external installat
 
 Seed mapping, thinking/reasoning controls, sampling presets, token budget, model reuse and force unload are retained. `force_unload_model` defaults to true; errors always stop the node-owned server and clear the cache. Switching model, projector or runtime causes a reload.
 
-`prompt_profile` offers `standard` and `uncensored fidelity QWEN`. Additional system instructions and custom Skill discovery are retained. Bundled guidance is image-only. Custom Skills provide creative guidance within the selected model's JSON contract; see [custom_skills/README.md](custom_skills/README.md).
+`prompt_profile` offers `standard` and `uncensored fidelity QWEN`. Additional system instructions are retained. The node uses only the bundled `qwen-image-prompt` skill.
 
 ## Checks
 

@@ -12,11 +12,10 @@ import folder_paths
 from comfy_api.latest import ComfyExtension, io
 
 from .media import image_content, text_content
-from .model_files import DEFAULT_MODELS, DEFAULT_MMPROJ, model_options, resolve_gguf
+from .model_files import DEFAULT_MODELS, DEFAULT_MMPROJ, model_options, projector_options, resolve_gguf
 from .runtime import LlamaServerManager
 from .skills import (
-    MODE_OPTIONS, PROMPT_PROFILES, PROMPT_PROFILE_STANDARD, SKILL_NAMES,
-    DEFAULT_SKILL_ID, resolve_mode, router_prompt, parse_skill_selection,
+    PROMPT_PROFILES, PROMPT_PROFILE_STANDARD,
     system_prompt, extract_prompt,
 )
 
@@ -72,11 +71,11 @@ class QwenImagePrompt(io.ComfyNode):
             inputs=[
                 io.String.Input("prompt", multiline=True, dynamic_prompts=True,
                                 default="Describe the image or the desired edit."),
-                io.Combo.Input("model_mode", options=list(MODE_OPTIONS), default="auto",
-                               tooltip="Auto: T2I without images, I2I with images. T2I ignores connected images."),
-                io.Combo.Input("skill", options=["auto", *SKILL_NAMES], default="auto"),
+                io.Combo.Input("skill", options=["qwen-image-prompt"], default="qwen-image-prompt"),
                 io.Combo.Input("t2i_model", options=model_options(MODEL_DIR, "T2I")),
                 io.Combo.Input("i2i_model", options=model_options(MODEL_DIR, "I2I")),
+                io.Combo.Input("mmproj", options=projector_options(MODEL_DIR), default="",
+                               tooltip="Leave empty for T2I. With reference images, an empty value automatically finds the I2I projector beside the model."),
                 io.Boolean.Input("think_mode", default=False),
                 io.Combo.Input("reasoning_effort", options=["low", "medium", "xhigh"], default="medium",
                                tooltip="Applied only in thinking mode."),
@@ -97,7 +96,7 @@ class QwenImagePrompt(io.ComfyNode):
         )
 
     @classmethod
-    def execute(cls, prompt, model_mode="auto", skill="auto",
+    def execute(cls, prompt, skill="qwen-image-prompt",
                 t2i_model=DEFAULT_MODELS["T2I"], i2i_model=DEFAULT_MODELS["I2I"],
                 think_mode=False, reasoning_effort="medium", seed=0, max_tokens=8192,
                 force_unload_model=True, prompt_profile=PROMPT_PROFILE_STANDARD,
@@ -105,7 +104,7 @@ class QwenImagePrompt(io.ComfyNode):
                 reference_image_1=None, reference_image_2=None, reference_image_3=None,
                 reference_image_4=None, reference_image_5=None, reference_image_6=None,
                 reference_image_7=None, reference_image_8=None, reference_image_9=None,
-                reference_image_10=None) -> io.NodeOutput:
+                reference_image_10=None, mmproj="") -> io.NodeOutput:
         started = time.perf_counter()
         # Keep cleanup inside the same lock as inference, including error cleanup.
         with INFERENCE_LOCK:
@@ -118,10 +117,8 @@ class QwenImagePrompt(io.ComfyNode):
                     reference_image_7, reference_image_8, reference_image_9,
                     reference_image_10,
                 ) if image is not None]
-                mode = resolve_mode(model_mode, len(images))
-                if mode == "T2I":
-                    images = []
                 _validate_reference_images(images)
+                mode = "I2I" if images else "T2I"
                 model_name = t2i_model if mode == "T2I" else i2i_model
                 if Path(model_name).name not in {
                     f"pe_{mode.lower()}_heretic-{quant}.gguf" for quant in ("Q4_K_M", "Q6_K", "Q8_0")
@@ -134,24 +131,15 @@ class QwenImagePrompt(io.ComfyNode):
                     sibling = model.parent / DEFAULT_MMPROJ
                     projector = resolve_gguf(
                         MODEL_DIR,
-                        sibling.relative_to(MODEL_DIR.resolve()).as_posix()
-                        if sibling.is_file() else DEFAULT_MMPROJ, LOGGER,
+                        mmproj.strip() or (sibling.relative_to(MODEL_DIR.resolve()).as_posix()
+                        if sibling.is_file() else DEFAULT_MMPROJ), LOGGER,
                     )
                 comfy.model_management.unload_all_models()
                 comfy.model_management.soft_empty_cache()
                 server, loaded_new = SERVER_MANAGER.acquire(model, projector)
                 LOGGER.info("[Qwen Image] mode=%s images=%d model=%s new=%s seed=%d",
                             mode, len(images), model.name, loaded_new, seed)
-                selected = skill
-                if selected == "auto":
-                    selected = DEFAULT_SKILL_ID
-                    if len(SKILL_NAMES) > 1:
-                        selection, _ = server.chat(
-                            router_prompt(prompt, mode), seed=seed, max_tokens=48,
-                            temperature=0.0, top_p=1.0, top_k=1, min_p=0.0,
-                            presence_penalty=0.0, repetition_penalty=1.0,
-                            think_mode=False, reasoning_effort="low")
-                        selected = parse_skill_selection(selection)
+                selected = "qwen-image-prompt"
                 messages = [
                     {"role": "system", "content": system_prompt(
                         selected, mode, prompt_profile, additional_system_instructions)},
