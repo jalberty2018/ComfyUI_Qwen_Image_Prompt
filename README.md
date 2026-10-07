@@ -14,18 +14,17 @@ Download the models and configure llama.cpp as described below, then restart Com
 
 ## Modes and inputs
 
-There is one `model` selector and one `mmproj` selector. The selected model determines the mode; there is no `model_mode` selector.
+Select `skill`, `model`, `mmproj` and `mode` explicitly. The mode selector offers only `T2I` and `I2I`; model names and connected images never switch it automatically.
 
-- T2I model: text only. Leave `mmproj` empty. Connected images and any selected projector are ignored.
-- I2I model: connect one to ten reference images and select `pe_i2i_heretic.mmproj-bf16.gguf` in `mmproj`. Missing images or an empty projector produce a clear error before loading.
-- Other GGUF models: text only without reference images; I2I with connected images. For I2I, use a vision-capable model and select its matching `mmproj` projector.
-- `skill` contains only `qwen-image-prompt`; no automatic skill routing is used.
+- `T2I`: text only. Leave `mmproj` empty. Connected images and any selected projector are ignored.
+- `I2I`: connect one to ten reference images and select the matching `mmproj` for your vision-capable model. Missing images or an empty projector produce an error before loading.
+- `skill`: select a bundled skill or a skill discovered in `custom_skills`. The selected skill is used directly, without automatic routing. Restart ComfyUI after adding skills.
 
 There are exactly ten optional IMAGE inputs, `reference_image_1` through `reference_image_10`. Disconnected inputs and inputs returning `None` are skipped. Each supplied tensor must hold one image, not a batch. Nonempty inputs are numbered consecutively as `<image1>`, `<image2>`, etc., in socket order. Refer to these consecutive numbers in your request. Video and audio inputs are not supported.
 
-The three STRING outputs retain their existing names and order: `h3_prompt`, `selected_skill`, `detected_mode`. The historical first name is retained only for output compatibility; its value is the extracted `rewritten_prompt` for Qwen Image. The third output is `T2I` or `I2I`. Aspect-ratio metadata is parsed internally and is not exposed as an additional output.
+The three STRING outputs retain their existing names and order: `h3_prompt`, `selected_skill`, `detected_mode`. The historical first name is retained only for output compatibility; its value is the extracted `rewritten_prompt` for Qwen Image. The third output reports the selected `T2I` or `I2I` mode. Aspect-ratio metadata is parsed internally and is not exposed as an additional output.
 
-This layout uses the new `QwenImagePromptSimple` ID to prevent old positional widget values from being silently applied to different fields. After updating, restart ComfyUI, refresh the page, and replace the old node with **Qwen Image 2.1 Prompt (Simple)**. Reconnect its inputs and three outputs. Old workflow nodes are not migrated automatically.
+This layout uses the new `QwenImagePromptSimple` ID to prevent old positional widget values from being silently applied to different fields. After updating, restart ComfyUI, refresh the page, and replace the old node with **Qwen Image 2.1 Prompt (Simple)**. Reconnect its inputs and three outputs. Old workflow nodes are not migrated automatically. Existing Simple nodes gain a `mode` selector (default `T2I`); explicitly choose `I2I` for image editing workflows.
 
 ## Models
 
@@ -67,7 +66,7 @@ Keep the executable's runtime libraries available through the external installat
 
 Seed mapping, thinking/reasoning controls, sampling presets, token budget, model reuse and force unload are retained. `force_unload_model` defaults to true; errors always stop the node-owned server and clear the cache. Switching model, projector or runtime causes a reload.
 
-`prompt_profile` offers `standard` and `uncensored fidelity QWEN`. Additional system instructions are retained. The node uses only the bundled `qwen-image-prompt` skill.
+`prompt_profile` offers `standard` and `uncensored fidelity QWEN`. Additional system instructions are retained. The default skill is `qwen-image-prompt`; the skill selector also includes discovered custom skills.
 
 ## Checks
 

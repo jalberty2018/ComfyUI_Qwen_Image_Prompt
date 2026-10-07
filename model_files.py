@@ -49,13 +49,3 @@ def projector_options(model_root: Path) -> list[str]:
                for path in root.rglob("*")
                if is_projector(path.name) and _is_usable_gguf(path.resolve(), root)}
     return ["", *sorted(options, key=str.casefold)]
-
-
-def model_mode(model_name: str, has_images: bool = False) -> str:
-    name = Path(model_name).name.lower()
-    if Path(name).suffix != ".gguf" or is_projector(name):
-        raise ValueError("Select a GGUF language model, not a projector file")
-    for mode in ("T2I", "I2I"):
-        if name.startswith(f"pe_{mode.lower()}_heretic-"):
-            return mode
-    return "I2I" if has_images else "T2I"

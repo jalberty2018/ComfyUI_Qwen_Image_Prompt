@@ -11,7 +11,7 @@ PROMPT_ROOT = Path(__file__).with_name("prompts")
 PROMPT_PROFILE_STANDARD = "standard"
 PROMPT_PROFILE_UNCENSORED_QWEN = "uncensored fidelity QWEN"
 PROMPT_PROFILES = (PROMPT_PROFILE_STANDARD, PROMPT_PROFILE_UNCENSORED_QWEN)
-MODE_OPTIONS = ("auto", "T2I", "I2I")
+MODE_OPTIONS = ("T2I", "I2I")
 CUSTOM_SKILL_ROOT = Path(__file__).with_name("custom_skills")
 LOGGER = logging.getLogger("ComfyUI.QwenImagePrompt.skills")
 SKILL_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
@@ -250,37 +250,6 @@ DEFAULT_SKILL_ID = (
     else (SKILL_NAMES[0] if SKILL_NAMES else "")
 )
 
-def parse_skill_selection(
-    text: str,
-    skills: tuple[SkillSpec, ...] | None = None,
-) -> str:
-    available = skills if skills is not None else SKILL_REGISTRY
-    by_id = {spec.id.casefold(): spec.id for spec in available}
-    normalized = text.strip().lower()
-    if normalized in by_id:
-        return by_id[normalized]
-    matches = [
-        spec.id
-        for spec in available
-        if re.search(
-            rf"(?<![a-z0-9_.-]){re.escape(spec.id.casefold())}(?![a-z0-9_.-])",
-            normalized,
-        )
-    ]
-    if not matches:
-        matches = [
-            spec.id
-            for spec in available
-            if re.search(
-                rf"(?<![a-z0-9_-]){re.escape(spec.id.casefold())}(?![a-z0-9_-])",
-                normalized,
-            )
-        ]
-    if len(matches) == 1:
-        return matches[0]
-    fallback = next((spec.id for spec in available if spec.id == DEFAULT_SKILL_ID), None)
-    return fallback or (available[0].id if available else "")
-
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
@@ -329,19 +298,10 @@ def is_custom_skill(skill: str) -> bool:
 def resolve_mode(selection: str, image_count: int) -> str:
     if not 0 <= image_count <= 10:
         raise ValueError("At most 10 reference images are supported")
-    if selection == "auto":
-        return "I2I" if image_count else "T2I"
     if selection not in MODE_OPTIONS:
         raise ValueError(f"Unknown model mode: {selection}")
     return selection
 
-
-def router_prompt(prompt: str, mode: str) -> list[dict[str, str]]:
-    choices = "\n".join(f"{s.id}: {s.description}" for s in SKILL_REGISTRY)
-    return [
-        {"role": "system", "content": "Select one skill ID only.\n" + choices},
-        {"role": "user", "content": f"Mode: {mode}\n{prompt}"},
-    ]
 
 
 def skill_instructions(skill: str, max_chars: int = 72000) -> str:

@@ -29,8 +29,6 @@ class ModelTests(unittest.TestCase):
             self.assertEqual(models.projector_options(root),
                              ["", "I2I/pe_i2i_heretic.mmproj-bf16.gguf", "nested/mmproj-other.GGUF"])
             self.assertEqual(models.resolve_gguf(root, "nested/Other.GGUF"), root / "nested/Other.GGUF")
-            self.assertEqual(models.model_mode("nested/Other.GGUF"), "T2I")
-            self.assertEqual(models.model_mode("nested/Other.GGUF", has_images=True), "I2I")
             self.assertEqual(models.resolve_gguf(root, "pe_i2i_heretic-Q6_K.gguf"),
                              root / "I2I/pe_i2i_heretic-Q6_K.gguf")
             with self.assertRaisesRegex(FileNotFoundError, "Ambiguous"):
@@ -49,11 +47,8 @@ class ModelTests(unittest.TestCase):
             projector.touch()
             self.assertEqual(set(models.model_options(root)), set(names))
             self.assertEqual(models.projector_options(root), ["", projector.relative_to(root).as_posix()])
-            self.assertEqual([models.model_mode(name) for name in names], ["T2I", "I2I"])
             (root / names[1]).unlink()
             self.assertEqual(models.model_options(root), [names[0]])
-            with self.assertRaises(ValueError):
-                models.model_mode(models.DEFAULT_MMPROJ)
 
     def test_path_escape_and_missing_files(self):
         with tempfile.TemporaryDirectory() as directory:

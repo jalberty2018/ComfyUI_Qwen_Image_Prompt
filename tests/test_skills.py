@@ -17,9 +17,10 @@ spec.loader.exec_module(skills)
 
 class ImageSkillsTests(unittest.TestCase):
     def test_modes(self):
-        self.assertEqual(skills.MODE_OPTIONS, ("auto", "T2I", "I2I"))
+        self.assertEqual(skills.MODE_OPTIONS, ("T2I", "I2I"))
         for count in range(11):
-            self.assertEqual(skills.resolve_mode("auto", count), "I2I" if count else "T2I")
+            with self.assertRaises(ValueError):
+                skills.resolve_mode("auto", count)
             self.assertEqual(skills.resolve_mode("T2I", count), "T2I")
             self.assertEqual(skills.resolve_mode("I2I", count), "I2I")
         with self.assertRaises(ValueError):

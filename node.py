@@ -12,11 +12,11 @@ import folder_paths
 from comfy_api.latest import ComfyExtension, io
 
 from .media import image_content, text_content
-from .model_files import DEFAULT_MODELS, DEFAULT_MMPROJ, model_options, model_mode, is_projector, projector_options, resolve_gguf
+from .model_files import DEFAULT_MODELS, DEFAULT_MMPROJ, model_options, is_projector, projector_options, resolve_gguf
 from .runtime import LlamaServerManager
 from .skills import (
     PROMPT_PROFILES, PROMPT_PROFILE_STANDARD,
-    system_prompt, extract_prompt,
+    system_prompt, extract_prompt, MODE_OPTIONS, SKILL_NAMES, DEFAULT_SKILL_ID, resolve_mode,
 )
 
 MODEL_DIR = Path(folder_paths.models_dir) / "LLM"
@@ -72,9 +72,9 @@ class QwenImagePrompt(io.ComfyNode):
             inputs=[
                 io.String.Input("prompt", multiline=True, dynamic_prompts=True,
                                 default="Describe the image or the desired edit."),
-                io.Combo.Input("skill", options=["qwen-image-prompt"], default="qwen-image-prompt"),
+                io.Combo.Input("skill", options=list(SKILL_NAMES), default=DEFAULT_SKILL_ID),
                 io.Combo.Input("model", options=models, default=models[0],
-                               tooltip="GGUF models from models/LLM and subfolders. Other models use I2I when reference images are connected."),
+                               tooltip="Select a GGUF language model from models/LLM and subfolders."),
                 io.Combo.Input("mmproj", options=projector_options(MODEL_DIR), default="",
                                tooltip="For reference images, select the mmproj matching your vision model. Leave empty for text only."),
                 io.Boolean.Input("think_mode", default=False),
@@ -87,6 +87,8 @@ class QwenImagePrompt(io.ComfyNode):
                                  tooltip="Stop this node's llama.cpp process after each run. Errors always unload."),
                 io.Combo.Input("prompt_profile", options=list(PROMPT_PROFILES), default=PROMPT_PROFILE_STANDARD),
                 io.String.Input("additional_system_instructions", multiline=True, dynamic_prompts=True, default=""),
+                io.Combo.Input("mode", options=list(MODE_OPTIONS), default="T2I",
+                               tooltip="T2I: text only. I2I: requires reference images and a matching mmproj."),
                 *[io.Image.Input(f"reference_image_{index}", optional=True,
                                  tooltip="Optional single image. Empty inputs are skipped; batches are not supported.")
                   for index in range(1, 11)],
@@ -105,7 +107,7 @@ class QwenImagePrompt(io.ComfyNode):
                 reference_image_1=None, reference_image_2=None, reference_image_3=None,
                 reference_image_4=None, reference_image_5=None, reference_image_6=None,
                 reference_image_7=None, reference_image_8=None, reference_image_9=None,
-                reference_image_10=None, mmproj="") -> io.NodeOutput:
+                reference_image_10=None, mmproj="", mode="T2I") -> io.NodeOutput:
         started = time.perf_counter()
         # Keep cleanup inside the same lock as inference, including error cleanup.
         with INFERENCE_LOCK:
@@ -118,7 +120,11 @@ class QwenImagePrompt(io.ComfyNode):
                     reference_image_7, reference_image_8, reference_image_9,
                     reference_image_10,
                 ) if image is not None]
-                mode = model_mode(model, has_images=bool(images))
+                mode = resolve_mode(mode, len(images))
+                if skill not in SKILL_NAMES:
+                    raise ValueError(f"Unknown skill: {skill}; select an available skill")
+                if Path(model).suffix.lower() != ".gguf" or is_projector(model):
+                    raise ValueError("Select a GGUF language model, not a projector file")
                 if mode == "T2I":
                     images = []
                 else:
@@ -136,7 +142,7 @@ class QwenImagePrompt(io.ComfyNode):
                 server, loaded_new = SERVER_MANAGER.acquire(model, projector)
                 LOGGER.info("[Qwen Image] mode=%s images=%d model=%s new=%s seed=%d",
                             mode, len(images), model.name, loaded_new, seed)
-                selected = "qwen-image-prompt"
+                selected = skill
                 messages = [
                     {"role": "system", "content": system_prompt(
                         selected, mode, prompt_profile, additional_system_instructions)},
