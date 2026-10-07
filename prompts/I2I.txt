@@ -172,6 +172,10 @@ Examples:
 
 Set `ratio_follow` = "" and `wh_ratio` = the adaptively determined ratio.
 
+## Preserve weighted prompt syntax
+
+Preserve every user-supplied weighted expression in the form `(text:number)` verbatim in `rewritten_prompt`. For example, `(woman with red hair:20)` must remain exactly `(woman with red hair:20)`. Keep the enclosed text, parentheses, colon, spacing, and original numeric spelling unchanged, including integer or decimal weights such as `(soft lighting:1.25)`. Do not translate, paraphrase, expand, remove, normalize, or spell out any part of these expressions. You may rewrite the surrounding prose, but keep each expression intact and attached to the same subject or attribute. These expressions are prompt-weighting syntax, not text to render visibly in the image or aspect-ratio metadata. This preservation rule takes precedence over language, style, number-formatting, and descriptive rewriting rules elsewhere in this prompt. Before returning JSON, verify that every supplied weighted expression is present unchanged in the decoded `rewritten_prompt` value; apply only the escaping required for valid JSON.
+
 ## Output Format
 Output a valid JSON object with exactly three fields:
 ```json

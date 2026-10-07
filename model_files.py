@@ -15,14 +15,16 @@ def _is_usable_gguf(path: Path, root: Path) -> bool:
             and path.is_relative_to(root) and ".cache" not in path.relative_to(root).parts)
 
 
+def is_projector(name: str) -> bool:
+    return "mmproj" in Path(name).name.lower()
+
+
 def model_options(model_root: Path, mode: str | None = None) -> list[str]:
     root = model_root.resolve()
     modes = (mode,) if mode else ("T2I", "I2I")
-    allowed = {f"pe_{family.lower()}_heretic-{quant}.gguf"
-               for family in modes for quant in ("Q4_K_M", "Q6_K", "Q8_0")}
     options = {path.resolve().relative_to(root).as_posix()
-               for path in root.rglob("*.gguf")
-               if path.name in allowed and _is_usable_gguf(path.resolve(), root)}
+               for path in root.rglob("*")
+               if not is_projector(path.name) and _is_usable_gguf(path.resolve(), root)}
     return sorted(options, key=str.casefold) or [DEFAULT_MODELS[family] for family in modes]
 
 
@@ -44,15 +46,16 @@ def resolve_gguf(model_dir: Path, name: str, logger: logging.Logger | None = Non
 def projector_options(model_root: Path) -> list[str]:
     root = model_root.resolve()
     options = {path.resolve().relative_to(root).as_posix()
-               for path in root.rglob(DEFAULT_MMPROJ)
-               if _is_usable_gguf(path.resolve(), root)}
+               for path in root.rglob("*")
+               if is_projector(path.name) and _is_usable_gguf(path.resolve(), root)}
     return ["", *sorted(options, key=str.casefold)]
 
 
-def model_mode(model_name: str) -> str:
-    name = Path(model_name).name
+def model_mode(model_name: str, has_images: bool = False) -> str:
+    name = Path(model_name).name.lower()
+    if Path(name).suffix != ".gguf" or is_projector(name):
+        raise ValueError("Select a GGUF language model, not a projector file")
     for mode in ("T2I", "I2I"):
-        if name in {f"pe_{mode.lower()}_heretic-{quant}.gguf"
-                    for quant in ("Q4_K_M", "Q6_K", "Q8_0")}:
+        if name.startswith(f"pe_{mode.lower()}_heretic-"):
             return mode
-    raise ValueError("Select a supported T2I or I2I Heretic GGUF model")
+    return "I2I" if has_images else "T2I"

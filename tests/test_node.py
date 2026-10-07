@@ -163,6 +163,28 @@ class NodeTests(unittest.TestCase):
                                          reference_image_1=image(), mmproj=node.DEFAULT_MODELS["I2I"])
         self.manager.acquire.assert_not_called()
 
+    def test_other_model_loads_with_and_without_reference_images(self):
+        model = self.root / "Other" / "model-Q5_K_M.gguf"
+        model.parent.mkdir()
+        model.touch()
+        projector = model.parent / "mmproj-other-f16.gguf"
+        projector.touch()
+        schema = node.QwenImagePrompt.define_schema()
+        self.assertIn("Other/model-Q5_K_M.gguf", next(f for f in schema.inputs if f.name == "model").options)
+        self.assertIn("Other/mmproj-other-f16.gguf", next(f for f in schema.inputs if f.name == "mmproj").options)
+        result = node.QwenImagePrompt.execute("Describe", model="Other/model-Q5_K_M.gguf")
+        self.assertEqual(result.result[-1], "T2I")
+        self.manager.acquire.assert_called_with(model, None)
+        with self.assertRaisesRegex(ValueError, "Select the I2I mmproj"):
+            node.QwenImagePrompt.execute("Edit", model="Other/model-Q5_K_M.gguf", reference_image_1=image())
+        self.server.chat.return_value = response("I2I")
+        result = node.QwenImagePrompt.execute("Edit", model="Other/model-Q5_K_M.gguf",
+                                             mmproj="Other/mmproj-other-f16.gguf", reference_image_1=image("reference"))
+        self.assertEqual(result.result[-1], "I2I")
+        self.manager.acquire.assert_called_with(model, projector)
+        content = self.server.chat.call_args.args[0][1]["content"]
+        self.assertTrue(any(part.get("image_url", {}).get("url") == "reference" for part in content))
+
     def test_skill_is_fixed_without_router_call(self):
         result = node.QwenImagePrompt.execute("A bicycle", skill="auto")
         self.assertEqual(result.result[1], "qwen-image-prompt")

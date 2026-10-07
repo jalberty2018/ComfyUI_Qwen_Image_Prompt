@@ -12,18 +12,25 @@ spec.loader.exec_module(models)
 
 
 class ModelTests(unittest.TestCase):
-    def test_family_filter_relative_paths_and_cache_exclusion(self):
+    def test_all_models_relative_paths_and_cache_exclusion(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for name in ("T2I/pe_t2i_heretic-Q4_K_M.gguf", "I2I/pe_i2i_heretic-Q6_K.gguf",
-                         "other/pe_t2i_heretic-Q4_K_M.gguf", "unrelated.gguf",
+                         "other/pe_t2i_heretic-Q4_K_M.gguf", "unrelated.gguf", "nested/Other.GGUF",
+                         "nested/mmproj-other.GGUF", "notes.txt",
                          ".cache/pe_t2i_heretic-Q8_0.gguf", "I2I/pe_i2i_heretic.mmproj-bf16.gguf"):
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.touch()
-            self.assertEqual(models.model_options(root, "T2I"),
-                             ["other/pe_t2i_heretic-Q4_K_M.gguf", "T2I/pe_t2i_heretic-Q4_K_M.gguf"])
-            self.assertEqual(models.model_options(root, "I2I"), ["I2I/pe_i2i_heretic-Q6_K.gguf"])
+            self.assertEqual(models.model_options(root),
+                             ["I2I/pe_i2i_heretic-Q6_K.gguf", "nested/Other.GGUF",
+                              "other/pe_t2i_heretic-Q4_K_M.gguf",
+                              "T2I/pe_t2i_heretic-Q4_K_M.gguf", "unrelated.gguf"])
+            self.assertEqual(models.projector_options(root),
+                             ["", "I2I/pe_i2i_heretic.mmproj-bf16.gguf", "nested/mmproj-other.GGUF"])
+            self.assertEqual(models.resolve_gguf(root, "nested/Other.GGUF"), root / "nested/Other.GGUF")
+            self.assertEqual(models.model_mode("nested/Other.GGUF"), "T2I")
+            self.assertEqual(models.model_mode("nested/Other.GGUF", has_images=True), "I2I")
             self.assertEqual(models.resolve_gguf(root, "pe_i2i_heretic-Q6_K.gguf"),
                              root / "I2I/pe_i2i_heretic-Q6_K.gguf")
             with self.assertRaisesRegex(FileNotFoundError, "Ambiguous"):
